@@ -34,7 +34,7 @@
         .accent-bg { background-color: var(--accent); }
         .accent-text { color: var(--accent); }
         
-        /* Loading Overlay Logic (The Fix for Freezing) */
+        /* Loading Overlay Logic (The Fix) */
         #loading-overlay { 
             position: fixed; inset: 0; background: var(--bg-main); z-index: 5000; display: flex; 
             flex-direction: column; align-items: center; justify-content: center; 
@@ -55,6 +55,9 @@
             box-shadow: 0 -5px 20px rgba(0,0,0,0.5);
         }
         #visual-panel.show-panel { transform: translateY(0%); }
+        
+        /* Modal Fix */
+        .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); z-index: 1000; }
     </style>
 </head>
 <body class="flex flex-col">
@@ -186,11 +189,11 @@
         </div>
     </div>
 
-    <!-- Create Modal -->
-    <div id="create-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur hidden flex items-center justify-center p-4">
+    <!-- Create Modal (BUG FIX: Use HTML Modal) -->
+    <div id="create-modal" class="modal-bg hidden flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-700 p-6 rounded-xl w-full max-w-sm shadow-2xl space-y-3">
             <h3 class="font-bold text-center text-gray-200 mb-2">新規作成</h3>
-            <input id="new-title" class="w-full bg-black border border-slate-700 rounded p-2 text-sm text-white focus:border-indigo-500 outline-none" placeholder="タイトル">
+            <input id="new-title" class="w-full bg-black border border-slate-700 rounded p-2 text-sm text-white focus:border-indigo-500 outline-none" placeholder="タイトル (必須)">
             <select id="new-genre" class="w-full bg-black border border-slate-700 rounded p-2 text-xs text-gray-300">
                 <option>ファンタジー</option><option>異世界転生</option><option>SF/サイバーパンク</option><option>現代ドラマ/学園</option><option>ホラー/ミステリー</option><option>その他</option>
             </select>
@@ -204,12 +207,12 @@
     </div>
 
     <!-- Settings Modal -->
-    <div id="settings-modal" class="fixed inset-0 z-50 bg-black/90 backdrop-blur hidden flex items-center justify-center p-4">
+    <div id="settings-modal" class="modal-bg hidden flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-700 p-6 rounded-xl w-full max-w-sm shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <h3 class="font-bold text-center text-gray-200">設定</h3>
             <div>
                 <label class="text-xs font-bold text-orange-400">🔥 Groq API Key</label>
-                <input type="password" id="key-groq" onchange="applyMidnightTheme()" class="w-full bg-black border border-slate-700 rounded p-2 mt-1 text-xs text-white focus:border-orange-500 outline-none">
+                <input type="password" id="key-groq" class="w-full bg-black border border-slate-700 rounded p-2 mt-1 text-xs text-white focus:border-orange-500 outline-none">
             </div>
             <div class="bg-slate-800 p-3 rounded border border-yellow-500/30">
                 <label class="text-xs font-bold text-yellow-400">⚡ Firebase Config</label>
@@ -223,7 +226,7 @@
                     <span class="text-[10px] text-gray-500">Midnight Mode (R-18 Features)</span>
                 </div>
                 <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" id="midnight-toggle" class="sr-only peer" onchange="applyMidnightTheme()">
+                    <input type="checkbox" id="midnight-toggle" class="sr-only peer">
                     <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
                 </label>
             </div>
@@ -318,6 +321,7 @@
             }
         }
 
+        // Show fallback button if loading takes too long
         setTimeout(() => {
             if (!$('loading-overlay').classList.contains('hidden-overlay')) {
                 $('loading-fallback').style.opacity = '1';
@@ -334,7 +338,9 @@
             
             // Event Listeners
             $('midnight-toggle').addEventListener('change', applyMidnightTheme);
-            $('sensory-level').addEventListener('input', () => { $('sensory-label').innerText = SENSORY_LABELS[$('sensory-level').value]; });
+            $('sensory-level').addEventListener('input', () => { 
+                $('sensory-label').innerText = SENSORY_LABELS[$('sensory-level').value]; 
+            });
             $('send-btn').addEventListener('click', () => { generateStoryLogic($('user-input').value.trim()); });
             
             // Safety net: ensure init happens eventually
@@ -378,7 +384,7 @@
             }
         }
 
-        function updateBadge(txt, col) { $('mode-badge').innerText = `v11.0 ${txt}`; $('mode-badge').className = `text-[9px] px-1.5 py-0.5 rounded border border-gray-600 ${col}`; }
+        function updateBadge(txt, col) { $('mode-badge').innerText = `v10.1 ${txt}`; $('mode-badge').className = `text-[9px] px-1.5 py-0.5 rounded border border-gray-600 ${col}`; }
         
         // --- Midnight Mode Logic ---
         function applyMidnightTheme() {
@@ -443,11 +449,17 @@
             } catch(e) { $('library-list').innerHTML = `<div class="text-red-400 col-span-2 text-xs">Error</div>`; } 
         }
 
-        window.openCreateModal = () => { $('new-title').value=''; $('new-plot').value=''; $('create-modal').classList.remove('hidden'); };
+        window.openCreateModal = () => { 
+            // Reset modal inputs
+            $('new-title').value = ''; 
+            $('new-plot').value = ''; 
+            // Show the HTML modal
+            $('create-modal').classList.remove('hidden'); 
+        };
         
         async function startNewStory() { 
             const title = $('new-title').value; 
-            if(!title) return alert("タイトルを入力"); 
+            if(!title) return alert("タイトルを入力してください"); 
             appData.currentStory = { 
                 title, 
                 plot: `ジャンル:${$('new-genre').value}\n文体:${$('new-tone').value}\n詳細:${$('new-plot').value}`, 
@@ -463,8 +475,6 @@
         async function aiSuggestChars() { 
             const btn = $('ai-char-btn'); 
             toggleLoading(true, "AIがキャラクターを考案中...");
-            if(!appData.keys.groq) { toggleLoading(false); return alert("Groqキーを設定してください"); }
-
             try {
                 const res = await callGroq([{role:"user", content:`Extract main characters from this plot. Return JSON array ONLY: [{name:"Name", prompt:"Appearance description in English (Visual traits only)", body_prompt:"Nude body description (e.g. slim, pale skin)"}]. Plot: ${appData.currentStory.plot}`}]);
                 let jsonStr = res.includes('[') ? res.substring(res.indexOf('['), res.lastIndexOf(']')+1) : "[]";
@@ -494,6 +504,7 @@
             const c = appData.currentStory.characters[i]; 
             const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(c.prompt + ", face focus, icon style")}?seed=${Math.floor(Math.random()*9999)}&width=256&height=256&nologo=true&model=flux`; 
             
+            // Wait for image load
             const img = new Image();
             img.onload = () => { appData.currentStory.characters[i].image = url; renderCharList(); toggleLoading(false); };
             img.onerror = () => { toggleLoading(false); alert("生成エラー"); };
@@ -510,13 +521,7 @@
         }
 
         // --- Studio & Logic ---
-        async function openStory(id) { 
-            const s = await window.FB.getStory(id); 
-            if(!s) return alert("Not Found"); 
-            appData.currentStory = { id, ...s }; 
-            showScreen('studio'); 
-            renderMessages(); 
-        }
+        async function openStory(id) { const s = await window.FB.getStory(id); if(!s) return alert("Not Found"); appData.currentStory = { id, ...s }; showScreen('studio'); renderMessages(); }
         
         $('send-btn').onclick = async () => { 
             const txt = $('user-input').value.trim(); 
@@ -530,8 +535,6 @@
         async function generateStoryLogic(inst) { 
             $('send-btn').disabled = true; 
             toggleLoading(true, "AIが執筆中...");
-            if(!appData.keys.groq) { $('send-btn').disabled = false; toggleLoading(false); return alert("Groqキーを設定してください"); }
-
             try { 
                 const isMidnight = appData.keys.midnight;
                 const sensoryLevel = isMidnight ? $('sensory-level').value : "1";
@@ -571,27 +574,13 @@
         }
 
         function renderMessages() { 
-            const content = $('studio-content');
-            content.innerHTML = appData.currentStory.messages.map(m => { 
+            $('studio-content').innerHTML = appData.currentStory.messages.map(m => { 
+                if(appData.mode === 'view' && m.role !== 'assistant') return ''; 
+                const img = m.image ? `<div class="relative group"><img src="${m.image}" class="w-full md:w-2/3 rounded-lg mb-2 border border-slate-700 block mx-auto"></div>` : ''; 
                 const bubble = m.role==='user' ? 'bg-indigo-900/50 text-white ml-auto border border-indigo-800' : 'bg-gray-900 text-gray-300 mr-auto border-l-2 border-indigo-500/50'; 
-                
-                let html = `<div class="mb-4 fade-in flex ${m.role==='user' ? 'justify-end' : 'justify-start'}">
-                                <div class="px-4 py-3 rounded-lg text-sm leading-relaxed max-w-[90%] ${bubble}">
-                                    ${m.content.replace(/\n/g,'<br>')}
-                                </div>
-                            </div>`;
-                
-                if (m.image) {
-                    html = `<div class="flex justify-center mb-4 fade-in">
-                                <div class="relative group max-w-full md:max-w-xl">
-                                    <img src="${m.image}" class="rounded-lg shadow-lg border border-slate-800 max-h-96 w-auto">
-                                    <div class="absolute bottom-2 right-2 bg-black/50 text-[10px] px-1 rounded text-white backdrop-blur">Pollinations</div>
-                                </div>
-                            </div>` + html;
-                }
-                return html;
+                return `<div class="mb-4 fade-in flex ${m.role==='user' ? 'justify-end' : 'justify-start'}"><div class="px-4 py-3 rounded-lg text-sm leading-relaxed max-w-[90%] ${bubble}">${img}${m.content.replace(/\n/g,'<br>')}</div></div>`; 
             }).join(''); 
-            content.scrollTop = content.scrollHeight; 
+            $('studio-content').scrollTop = $('studio-content').scrollHeight; 
         }
 
         // --- Visual Panel ---
@@ -599,8 +588,7 @@
             const p = $('visual-panel'); 
             p.classList.toggle('show-panel'); 
             if(p.classList.contains('show-panel')) {
-                 const currentChars = appData.currentStory ? appData.currentStory.characters : [];
-                 $('visual-char-chips').innerHTML = currentChars.map((c, i) => `<label class="flex items-center gap-2 bg-gray-900 px-3 py-2 rounded border border-gray-700 flex-shrink-0 select-none cursor-pointer"><input type="checkbox" class="char-checkbox accent-pink-500 w-4 h-4" value="${i}"><span class="text-xs text-gray-300 font-bold">${c.name}</span></label>`).join(''); 
+                 $('visual-char-chips').innerHTML = (appData.currentStory.characters||[]).map((c, i) => `<label class="flex items-center gap-2 bg-gray-900 px-3 py-2 rounded border border-gray-700 flex-shrink-0 select-none cursor-pointer"><input type="checkbox" class="char-checkbox accent-pink-500 w-4 h-4" value="${i}"><span class="text-xs text-gray-300 font-bold">${c.name}</span></label>`).join(''); 
             }
         };
 
@@ -608,8 +596,8 @@
             toggleLoading(true, "画像を生成中...");
             
             // 1. Settings
-            const model = $('visual-model').value;
             const aspectKey = $('visual-aspect').value; 
+            const model = $('visual-model').value;
             const costumeKey = $('visual-costume').value;
             const cameraKey = $('visual-camera').value;
             const customPrompt = $('visual-custom-prompt').value || "";
@@ -620,18 +608,14 @@
             const size = sizeMap[aspectKey] || sizeMap["16:9"];
 
             // 3. Modifiers
-            let suffix = ", masterpiece, 8k, photorealistic";
-
+            let suffix = ", masterpiece, 8k";
             if (isMidnight) {
                 suffix += ", uncensored, nsfw"; 
                 if (cameraKey === 'face') suffix += ", focus on face, blush, saliva, heavy breathing";
-                if (cameraKey === 'pov') suffix += ", looking down, high angle";
                 if (cameraKey === 'body') suffix += ", focus on body, skin details";
                 if (costumeKey === 'half') suffix += ", disheveled clothes, messy, clothes falling off";
                 if (costumeKey === 'lingerie') suffix += ", wearing sexy lingerie, lace";
                 if (costumeKey === 'nude') suffix += ", fully nude, naked, nipples, pussy";
-            } else {
-                 suffix += ", anime style, safe for work"; 
             }
 
             // 4. Build Character Prompts
@@ -646,7 +630,9 @@
             });
 
             let finalPrompt = "";
-            if (charPrompts.length > 0) {
+            if (charPrompts.length === 1) {
+                finalPrompt = `(${charPrompts[0]})`;
+            } else if (charPrompts.length > 1) {
                 finalPrompt = charPrompts.map(p => `(${p})`).join(', ') + `, ${charPrompts.length}people`;
             }
 
@@ -654,6 +640,7 @@
             const seed = Math.floor(Math.random() * 9999);
             const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPrompt)}?seed=${seed}&width=${size.w}&height=${size.h}&nologo=true&model=${model}`; 
 
+            // Preload Image to ensure it's ready before hiding loader
             const imgObj = new Image();
             imgObj.onload = () => {
                 const div = document.createElement('div');
@@ -670,11 +657,7 @@
         };
 
         window.insertImage = async (url) => { appData.currentStory.messages.push({role:'assistant', content:'(挿絵)', image:url}); renderMessages(); await window.FB.saveStory(appData.currentStory.id, { messages: appData.currentStory.messages, cover: url }); toggleVisualTab(); };
-        window.showScreen = (id) => { 
-            ['library','studio','char-studio'].forEach(s => $(`screen-${s}`).classList.add('translate-x-full','hidden')); 
-            $(`screen-${id}`).classList.remove('translate-x-full','hidden'); 
-            if(id === 'library') loadLibrary(); 
-        };
+        window.showScreen = (id) => { ['library','studio','char-studio'].forEach(s => $(`screen-${s}`).classList.add('translate-x-full','hidden')); $(`screen-${id}`).classList.remove('translate-x-full','hidden'); if(id==='library') loadLibrary(); };
         
         showScreen('library');
     </script>

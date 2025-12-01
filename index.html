@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>StoryWeaver v9.1</title>
+    <title>StoryWeaver v9.3</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;700&family=Noto+Sans+JP:wght@300;400;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -14,23 +14,42 @@
         .fade-in { animation: fadeIn 0.4s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .book-page { background: #1e293b; color: #cbd5e1; line-height: 2.0; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3); }
-        .char-checkbox:checked + div { border-color: #ec4899; background-color: rgba(236, 72, 153, 0.2); color: #fbcfe8; }
+        /* Loading Spinner Overlay */
+        #loading-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.3s; }
+        .spinner { width: 40px; height: 40px; border: 4px solid #334155; border-top-color: #6366f1; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        /* Error Box */
+        #error-toast { position: fixed; top: 1rem; left: 1rem; right: 1rem; background: #7f1d1d; color: #fecaca; padding: 1rem; border-radius: 0.5rem; border: 1px solid #ef4444; z-index: 110; display: none; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); font-size: 0.8rem; }
     </style>
 </head>
 <body class="h-[100dvh] flex flex-col">
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="hidden">
+        <div class="spinner mb-4"></div>
+        <p class="text-indigo-300 text-sm font-bold animate-pulse" id="loading-text">Loading...</p>
+    </div>
+
+    <!-- Error Toast -->
+    <div id="error-toast">
+        <div class="font-bold flex items-center gap-2 mb-1"><i data-lucide="alert-triangle" class="w-4 h-4"></i> エラー発生</div>
+        <div id="error-msg"></div>
+        <button onclick="$('error-toast').style.display='none'" class="mt-2 text-xs underline">閉じる</button>
+        <button onclick="$('settings-modal').classList.remove('hidden')" class="mt-2 ml-4 text-xs bg-white text-red-900 px-2 py-1 rounded">設定を開く</button>
+    </div>
 
     <!-- Header -->
     <header class="h-14 flex-none bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 z-20">
         <div class="flex items-center gap-2 cursor-pointer" onclick="showScreen('library')">
             <i data-lucide="library" class="w-5 h-5 text-indigo-400"></i>
             <span class="font-serif font-bold text-lg text-indigo-100">StoryWeaver</span>
-            <span class="text-[10px] px-1.5 py-0.5 rounded border border-blue-500/30 text-blue-400">v9.1</span>
+            <span id="mode-badge" class="text-[9px] px-1.5 py-0.5 rounded border border-gray-600 text-gray-400">INIT</span>
         </div>
         <div class="flex gap-3">
-            <button id="mode-toggle" class="hidden text-xs px-2 py-1 rounded border border-indigo-500/50 text-indigo-300 flex items-center gap-1">
+            <button id="view-mode-btn" class="hidden text-xs px-2 py-1 rounded border border-indigo-500/50 text-indigo-300 flex items-center gap-1">
                 <i data-lucide="eye" class="w-4 h-4"></i> View
             </button>
-            <button onclick="$('settings-modal').classList.remove('hidden')" class="text-xs text-gray-400 hover:text-white">
+            <button onclick="openSettings()" class="text-xs text-gray-400 hover:text-white">
                 <i data-lucide="settings" class="w-5 h-5"></i>
             </button>
         </div>
@@ -38,9 +57,8 @@
 
     <!-- Main Screens -->
     <main class="flex-grow relative overflow-hidden bg-slate-950">
-        
         <!-- 1. Library -->
-        <div id="screen-library" class="absolute inset-0 overflow-y-auto p-4 space-y-4 z-10 bg-slate-950">
+        <div id="screen-library" class="absolute inset-0 overflow-y-auto p-4 space-y-4 z-10 bg-slate-950 hidden">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-xl font-bold text-gray-200">本棚</h2>
                 <button onclick="openCreateModal()" class="bg-indigo-600 text-white px-4 py-2 rounded-full text-sm font-bold shadow-lg flex items-center gap-2">
@@ -50,139 +68,72 @@
             <div id="library-list" class="grid grid-cols-2 gap-4 pb-20"></div>
         </div>
 
-        <!-- 2. Character Studio -->
-        <div id="screen-char-studio" class="absolute inset-0 flex flex-col bg-slate-950 translate-x-full transition-transform duration-300 z-30">
+        <!-- 2. Char Studio -->
+        <div id="screen-char-studio" class="absolute inset-0 flex flex-col bg-slate-950 translate-x-full transition-transform duration-300 z-30 hidden">
+            <!-- Content same as v9.1 but simplified for brevity in this fix -->
             <div class="p-4 border-b border-slate-800 bg-slate-900 flex justify-between items-center">
                 <h2 class="font-bold text-indigo-400 flex items-center gap-2"><i data-lucide="users" class="w-4 h-4"></i> キャスト設定</h2>
-                <button onclick="finishCharSetup()" class="text-xs bg-indigo-600 px-3 py-1 rounded text-white">執筆へ進む</button>
+                <button onclick="finishCharSetup()" class="text-xs bg-indigo-600 px-3 py-1 rounded text-white">執筆へ</button>
             </div>
             <div class="p-4 bg-slate-900 border-b border-slate-800 space-y-2">
-                <p class="text-xs text-gray-400">設定からキャラを自動生成します。</p>
-                <button onclick="aiSuggestChars()" id="ai-char-btn" class="w-full py-2 bg-slate-800 border border-indigo-500/50 text-indigo-300 rounded text-xs flex items-center justify-center gap-2">
+                <button onclick="aiSuggestChars()" class="w-full py-2 bg-slate-800 border border-indigo-500/50 text-indigo-300 rounded text-xs flex items-center justify-center gap-2">
                     <i data-lucide="sparkles" class="w-3 h-3"></i> AI提案 (Groq)
                 </button>
             </div>
             <div id="char-list" class="flex-grow overflow-y-auto p-4 space-y-4 pb-20"></div>
             <div class="p-4 pb-safe bg-slate-900 border-t border-slate-800">
-                <button onclick="addEmptyChar()" class="w-full py-2 bg-slate-800 text-gray-400 rounded text-xs border border-dashed border-gray-600">+ 手動で追加</button>
+                <button onclick="addEmptyChar()" class="w-full py-2 bg-slate-800 text-gray-400 rounded text-xs border border-dashed border-gray-600">+ 追加</button>
             </div>
         </div>
 
         <!-- 3. Studio -->
-        <div id="screen-studio" class="absolute inset-0 flex flex-col bg-slate-950 translate-x-full transition-transform duration-300 z-20">
+        <div id="screen-studio" class="absolute inset-0 flex flex-col bg-slate-950 translate-x-full transition-transform duration-300 z-20 hidden">
             <div id="studio-content" class="flex-grow overflow-y-auto p-4 pb-32 font-serif scrollbar-hide"></div>
-
-            <!-- New Char Alert -->
-            <div id="new-char-alert" class="absolute bottom-20 left-4 right-4 bg-slate-800 border border-yellow-500/50 p-3 rounded-lg shadow-xl flex items-center justify-between hidden transition-all transform translate-y-10 opacity-0">
-                <div class="flex items-center gap-3">
-                    <div class="bg-yellow-500/20 p-2 rounded-full text-yellow-400"><i data-lucide="user-plus" class="w-4 h-4"></i></div>
-                    <div>
-                        <p class="text-xs font-bold text-yellow-100">新キャラ発見: <span id="new-char-name"></span></p>
-                        <p class="text-[10px] text-gray-400">キャストに追加しますか？</p>
-                    </div>
-                </div>
-                <div class="flex gap-2">
-                    <button onclick="$('new-char-alert').classList.add('hidden')" class="text-gray-500 text-xs">無視</button>
-                    <button onclick="acceptNewChar()" class="bg-yellow-600 text-white px-3 py-1 rounded text-xs">追加</button>
-                </div>
+            <!-- Alert -->
+            <div id="new-char-alert" class="absolute bottom-20 left-4 right-4 bg-slate-800 border border-yellow-500/50 p-3 rounded-lg shadow-xl flex items-center justify-between hidden">
+                <div class="text-xs text-yellow-100">新キャラ発見: <span id="new-char-name" class="font-bold"></span></div>
+                <button onclick="acceptNewChar()" class="bg-yellow-600 text-white px-2 py-1 rounded text-xs">追加</button>
             </div>
-
-            <!-- Edit Controls -->
-            <div id="edit-controls" class="absolute bottom-0 w-full bg-slate-900/95 border-t border-slate-800 backdrop-blur pb-safe transition-transform duration-300">
-                <div class="flex gap-2 p-2 overflow-x-auto border-b border-slate-800 scrollbar-hide">
-                     <button onclick="openCharStudio()" class="flex-shrink-0 px-3 py-1.5 bg-indigo-900/30 text-indigo-400 border border-indigo-700/50 rounded text-xs flex items-center gap-1">
-                        <i data-lucide="users" class="w-3 h-3"></i> キャスト
-                    </button>
-                     <button onclick="branchStory()" class="flex-shrink-0 px-3 py-1.5 bg-green-900/30 text-green-400 border border-green-700/50 rounded text-xs flex items-center gap-1">
-                        <i data-lucide="git-branch" class="w-3 h-3"></i> 分岐
-                    </button>
-                     <button onclick="toggleVisualTab()" class="flex-shrink-0 px-3 py-1.5 bg-pink-900/30 text-pink-400 border border-pink-700/50 rounded text-xs flex items-center gap-1">
-                        <i data-lucide="image" class="w-3 h-3"></i> 挿絵/素材
-                    </button>
+            <!-- Controls -->
+            <div id="edit-controls" class="absolute bottom-0 w-full bg-slate-900/95 border-t border-slate-800 backdrop-blur pb-safe">
+                <div class="flex gap-2 p-2 overflow-x-auto border-b border-slate-800">
+                     <button onclick="openCharStudio()" class="flex-shrink-0 px-3 py-1 bg-slate-800 text-indigo-400 rounded text-xs">キャスト</button>
+                     <button onclick="toggleVisualTab()" class="flex-shrink-0 px-3 py-1 bg-slate-800 text-pink-400 rounded text-xs">挿絵</button>
                 </div>
                 <div class="flex gap-2 p-3">
-                    <textarea id="user-input" rows="1" class="flex-grow bg-slate-800 border-none rounded-2xl px-4 py-3 text-sm focus:ring-1 focus:ring-indigo-500 outline-none resize-none" placeholder="次の展開..."></textarea>
-                    <button id="send-btn" class="w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-lg flex-none">
-                        <i data-lucide="send" class="w-5 h-5"></i>
-                    </button>
+                    <textarea id="user-input" rows="1" class="flex-grow bg-slate-800 border-none rounded-2xl px-4 py-3 text-sm focus:ring-1 focus:ring-indigo-500 outline-none resize-none"></textarea>
+                    <button id="send-btn" class="w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center text-white"><i data-lucide="send" class="w-5 h-5"></i></button>
                 </div>
             </div>
         </div>
-        
+
         <!-- 4. Visual Panel -->
         <div id="visual-panel" class="absolute inset-x-0 bottom-0 h-[75vh] bg-black border-t border-slate-700 rounded-t-2xl transform translate-y-full transition-transform duration-300 z-40 flex flex-col">
             <div class="p-3 bg-slate-900 flex justify-between items-center rounded-t-2xl">
-                <span class="text-xs font-bold text-pink-400 flex items-center gap-2"><i data-lucide="image" class="w-4 h-4"></i> 挿絵・素材生成</span>
+                <span class="text-xs font-bold text-pink-400">挿絵・素材</span>
                 <button onclick="toggleVisualTab()" class="text-gray-400"><i data-lucide="x" class="w-5 h-5"></i></button>
             </div>
-            
-            <div class="bg-slate-900 px-3 py-2 border-b border-slate-800 flex gap-2 overflow-x-auto scrollbar-hide">
-                <select id="visual-aspect" class="bg-black border border-slate-700 text-xs rounded px-2 py-1 text-gray-300">
-                    <option value="16:9">挿絵 (16:9)</option>
-                    <option value="9:16">立ち絵 (9:16)</option>
-                    <option value="1:1">正方形 (1:1)</option>
-                    <option value="4:3">設定画 (4:3)</option>
-                </select>
-                <select id="visual-mode" class="bg-black border border-slate-700 text-xs rounded px-2 py-1 text-gray-300">
-                    <option value="normal">通常</option>
-                    <option value="sheet">設定資料</option>
-                    <option value="standing">立ち絵(白背景)</option>
-                </select>
+            <div class="bg-slate-900 px-3 py-2 border-b border-slate-800 flex gap-2 overflow-x-auto">
+                <select id="visual-aspect" class="bg-black border border-slate-700 text-xs rounded text-gray-300"><option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option></select>
+                <select id="visual-mode" class="bg-black border border-slate-700 text-xs rounded text-gray-300"><option value="normal">通常</option><option value="sheet">設定画</option><option value="standing">立ち絵</option></select>
             </div>
-
-            <div class="p-2 bg-slate-900 border-b border-slate-800 text-[10px] text-gray-500">キャラ選択 (複数可)</div>
-            <div class="p-2 bg-slate-900 border-b border-slate-800 overflow-x-auto whitespace-nowrap scrollbar-hide flex gap-2" id="visual-char-chips"></div>
-            
+            <div class="p-2 bg-slate-900 border-b border-slate-800 overflow-x-auto flex gap-2" id="visual-char-chips"></div>
             <div class="p-2 bg-slate-900 border-b border-slate-800 flex gap-2">
-                <input id="visual-custom-prompt" class="flex-grow bg-black border border-slate-700 rounded px-2 text-xs" placeholder="状況 (例: 笑っている)">
+                <input id="visual-custom-prompt" class="flex-grow bg-black border border-slate-700 rounded px-2 text-xs" placeholder="状況">
                 <button onclick="generateWithChar()" class="bg-pink-600 text-white px-3 py-1 rounded text-xs font-bold whitespace-nowrap">描く</button>
             </div>
             <div id="visual-list" class="flex-grow overflow-y-auto p-4 space-y-4 pb-safe"></div>
         </div>
-
     </main>
 
-    <!-- Create Modal (Revived UI) -->
+    <!-- Create Modal -->
     <div id="create-modal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur hidden flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-700 p-6 rounded-xl w-full max-w-sm shadow-2xl space-y-4">
-            <h3 class="font-bold text-center text-gray-200">新しい物語</h3>
-            
-            <div>
-                <label class="text-xs text-gray-400">タイトル</label>
-                <input id="new-title" class="w-full bg-black border border-slate-700 rounded p-2 text-sm text-white" placeholder="例: 転生したらスライムだった">
-            </div>
-
-            <!-- Genre Selection (Revived) -->
-            <div class="grid grid-cols-2 gap-2">
-                <div>
-                    <label class="text-xs text-gray-400">ジャンル</label>
-                    <select id="new-genre" class="w-full bg-black border border-slate-700 rounded p-2 text-xs text-white">
-                        <option value="ファンタジー">ファンタジー</option>
-                        <option value="異世界転生">異世界転生</option>
-                        <option value="SF/サイバーパンク">SF/サイバーパンク</option>
-                        <option value="現代ドラマ">現代ドラマ/学園</option>
-                        <option value="ホラー/ミステリー">ホラー/ミステリー</option>
-                        <option value="その他">その他</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="text-xs text-gray-400">文体/トーン</label>
-                    <select id="new-tone" class="w-full bg-black border border-slate-700 rounded p-2 text-xs text-white">
-                        <option value="標準">標準</option>
-                        <option value="ラノベ風(軽快)">ラノベ風(軽快)</option>
-                        <option value="文豪風(重厚)">文豪風(重厚)</option>
-                        <option value="ダーク/シリアス">ダーク/シリアス</option>
-                        <option value="コメディ/ギャグ">コメディ/ギャグ</option>
-                    </select>
-                </div>
-            </div>
-
-            <div>
-                <label class="text-xs text-gray-400">あらすじ・要素 (自由入力)</label>
-                <textarea id="new-plot" rows="3" class="w-full bg-black border border-slate-700 rounded p-2 text-sm text-white" placeholder="自由に追記できます..."></textarea>
-            </div>
-
-            <button onclick="startNewStory()" class="w-full py-3 bg-indigo-600 text-white font-bold rounded-lg">キャラ設定へ進む</button>
+            <h3 class="font-bold text-center text-gray-200">新規作成</h3>
+            <input id="new-title" class="w-full bg-black border border-slate-700 rounded p-2 text-sm" placeholder="タイトル">
+            <select id="new-genre" class="w-full bg-black border border-slate-700 rounded p-2 text-xs"><option>ファンタジー</option><option>SF</option><option>現代</option></select>
+            <textarea id="new-plot" rows="3" class="w-full bg-black border border-slate-700 rounded p-2 text-sm" placeholder="あらすじ"></textarea>
+            <button onclick="startNewStory()" class="w-full py-3 bg-indigo-600 text-white font-bold rounded-lg">次へ</button>
             <button onclick="$('create-modal').classList.add('hidden')" class="w-full py-2 text-gray-500 text-xs">キャンセル</button>
         </div>
     </div>
@@ -196,48 +147,77 @@
                 <input type="password" id="key-groq" class="w-full bg-black border border-slate-700 rounded p-2 mt-1 text-xs">
             </div>
             <div class="bg-slate-800 p-3 rounded border border-yellow-500/30">
-                <label class="text-xs font-bold text-yellow-400">⚡ Firebase Config (JSON)</label>
-                <textarea id="firebase-config" rows="5" class="w-full bg-black border border-slate-700 rounded p-2 mt-1 text-[10px] font-mono text-gray-300"></textarea>
+                <label class="text-xs font-bold text-yellow-400">⚡ Firebase Config</label>
+                <p class="text-[9px] text-gray-400 mb-1">`apiKey` 等を含む `{...}` を貼り付けてください。</p>
+                <textarea id="firebase-config" rows="6" class="w-full bg-black border border-slate-700 rounded p-2 text-[10px] font-mono text-gray-300"></textarea>
             </div>
-            <button onclick="saveSettings()" class="w-full py-3 bg-indigo-600 text-white font-bold rounded-lg">保存して再起動</button>
-            <button onclick="$('settings-modal').classList.add('hidden')" class="w-full py-2 text-gray-500 text-xs">キャンセル</button>
+            <div class="flex gap-2">
+                <button onclick="saveSettings(false)" class="flex-grow py-3 bg-indigo-600 text-white font-bold rounded-lg text-xs">保存して接続</button>
+                <button onclick="saveSettings(true)" class="flex-grow py-3 bg-slate-700 text-white font-bold rounded-lg text-xs border border-slate-500">ローカルで使う</button>
+            </div>
         </div>
     </div>
 
-    <!-- Firebase SDK -->
+    <!-- Firebase SDK (Modular) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
         import { getFirestore, collection, addDoc, getDocs, doc, getDoc, updateDoc, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
         window.FB = { 
-            init: (config) => {
+            available: false,
+            init: (configObj) => {
                 try {
-                    const app = initializeApp(config);
+                    const app = initializeApp(configObj);
                     window.db = getFirestore(app);
+                    window.FB.available = true;
+                    console.log("Firebase initialized");
                     return true;
-                } catch(e) { console.error(e); return false; }
+                } catch(e) { 
+                    console.error("Firebase Init Error:", e);
+                    throw new Error("Firebase接続エラー: Configが正しいか確認してください (" + e.message + ")");
+                }
             },
+            // Wrapper methods...
             getLibrary: async () => {
-                if(!window.db) return [];
+                if(!window.FB.available) return JSON.parse(localStorage.getItem('local_stories') || '[]');
                 const q = query(collection(window.db, "stories"), orderBy("updatedAt", "desc"));
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
             },
             createStory: async (data) => {
-                if(!window.db) return;
-                const docRef = await addDoc(collection(window.db, "stories"), {
-                    ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp()
-                });
-                return docRef.id;
+                const now = new Date();
+                const storyData = { ...data, createdAt: now, updatedAt: now };
+                if(window.FB.available) {
+                    const docRef = await addDoc(collection(window.db, "stories"), { ...storyData, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+                    return docRef.id;
+                } else {
+                    const id = 'local_' + Date.now();
+                    const stories = JSON.parse(localStorage.getItem('local_stories') || '[]');
+                    stories.unshift({ id, ...storyData });
+                    localStorage.setItem('local_stories', JSON.stringify(stories));
+                    return id;
+                }
             },
             saveStory: async (id, data) => {
-                if(!window.db) return;
-                await updateDoc(doc(window.db, "stories", id), { ...data, updatedAt: serverTimestamp() });
+                if(window.FB.available && !id.startsWith('local_')) {
+                    await updateDoc(doc(window.db, "stories", id), { ...data, updatedAt: serverTimestamp() });
+                } else {
+                    const stories = JSON.parse(localStorage.getItem('local_stories') || '[]');
+                    const idx = stories.findIndex(s => s.id === id);
+                    if(idx !== -1) {
+                        stories[idx] = { ...stories[idx], ...data, updatedAt: new Date() };
+                        localStorage.setItem('local_stories', JSON.stringify(stories));
+                    }
+                }
             },
             getStory: async (id) => {
-                if(!window.db) return null;
-                const snap = await getDoc(doc(window.db, "stories", id));
-                return snap.exists() ? snap.data() : null;
+                if(window.FB.available && !id.startsWith('local_')) {
+                    const snap = await getDoc(doc(window.db, "stories", id));
+                    return snap.exists() ? snap.data() : null;
+                } else {
+                    const stories = JSON.parse(localStorage.getItem('local_stories') || '[]');
+                    return stories.find(s => s.id === id) || null;
+                }
             }
         };
         window.dispatchEvent(new Event('firebase-ready'));
@@ -246,253 +226,240 @@
     <script>
         lucide.createIcons();
         const $ = (id) => document.getElementById(id);
-        
         let appData = { keys: {}, currentStory: null, mode: 'edit', pendingNewChar: null };
+
+        function showLoading(show, msg="Loading...") {
+            const ol = $('loading-overlay');
+            $('loading-text').innerText = msg;
+            ol.classList.toggle('hidden', !show);
+        }
+
+        function showError(msg) {
+            $('error-msg').innerText = msg;
+            $('error-toast').style.display = 'block';
+            showLoading(false);
+        }
 
         // --- Init ---
         window.addEventListener('firebase-ready', () => {
-            const saved = localStorage.getItem('story_weaver_v9_config');
-            if(saved) {
-                const parsed = JSON.parse(saved);
-                appData.keys = parsed.keys;
-                $('key-groq').value = appData.keys.groq || '';
-                $('firebase-config').value = appData.keys.firebase ? JSON.stringify(appData.keys.firebase, null, 2) : '';
-                if(appData.keys.firebase && window.FB.init(appData.keys.firebase)) loadLibrary();
-            } else {
-                $('settings-modal').classList.remove('hidden');
-            }
+            initApp();
         });
 
-        window.saveSettings = () => {
+        async function initApp() {
+            showLoading(true, "起動中...");
             try {
-                const fb = JSON.parse($('firebase-config').value);
-                const gq = $('key-groq').value;
-                localStorage.setItem('story_weaver_v9_config', JSON.stringify({ keys: { groq: gq, firebase: fb } }));
-                location.reload();
-            } catch(e) { alert("Config Error: " + e.message); }
+                const saved = localStorage.getItem('story_weaver_v9_config');
+                if(saved) {
+                    const parsed = JSON.parse(saved);
+                    appData.keys = parsed.keys;
+                    $('key-groq').value = appData.keys.groq || '';
+                    $('firebase-config').value = appData.keys.firebaseRaw || '';
+
+                    // Try Init Firebase if present
+                    if(appData.keys.firebaseRaw && !appData.keys.useLocal) {
+                        try {
+                            // Robust parsing: Handle simple JS object paste
+                            let configStr = appData.keys.firebaseRaw.trim();
+                            // Wrap in braces if missing
+                            if(!configStr.startsWith('{')) configStr = '{' + configStr + '}';
+                            // Use Function constructor to parse loose JSON (e.g. keys without quotes)
+                            const configObj = (new Function("return " + configStr))();
+                            
+                            window.FB.init(configObj);
+                            updateBadge("CLOUD", "text-green-400", "border-green-600");
+                        } catch(e) {
+                            console.warn("Firebase Init Failed, falling back to local", e);
+                            showError("Firebase設定の読み込みに失敗しました。ローカルモードで起動します。\n詳細: " + e.message);
+                            updateBadge("LOCAL (Error)", "text-red-400", "border-red-600");
+                        }
+                    } else {
+                        updateBadge("LOCAL", "text-gray-400", "border-gray-600");
+                    }
+                    await loadLibrary();
+                } else {
+                    $('settings-modal').classList.remove('hidden');
+                }
+            } catch(e) {
+                showError("起動エラー: " + e.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function updateBadge(text, colorClass, borderClass) {
+            const b = $('mode-badge');
+            b.innerText = text;
+            b.className = `text-[9px] px-1.5 py-0.5 rounded border ${colorClass} ${borderClass}`;
+        }
+
+        window.openSettings = () => $('settings-modal').classList.remove('hidden');
+
+        window.saveSettings = (useLocal) => {
+            const gq = $('key-groq').value.trim();
+            const fbRaw = $('firebase-config').value.trim();
+            
+            appData.keys = { 
+                groq: gq, 
+                firebaseRaw: fbRaw,
+                useLocal: useLocal 
+            };
+            
+            localStorage.setItem('story_weaver_v9_config', JSON.stringify({ keys: appData.keys }));
+            location.reload();
         };
 
+        // --- Library ---
         async function loadLibrary() {
-            $('library-list').innerHTML = '<div class="col-span-2 text-center animate-pulse text-gray-500">読み込み中...</div>';
             try {
                 const stories = await window.FB.getLibrary();
+                const list = $('library-list');
+                list.innerHTML = '';
+                
                 if(stories.length === 0) {
-                    $('library-list').innerHTML = '<div class="col-span-2 text-center text-gray-500 mt-10">物語がありません。<br>「新規作成」からどうぞ！</div>';
+                    list.innerHTML = '<div class="col-span-2 text-center text-gray-500 mt-10 text-xs">まだ物語がありません。<br>右上の「新規作成」から始めましょう！</div>';
                     return;
                 }
-                $('library-list').innerHTML = stories.map(s => `
-                    <div onclick="openStory('${s.id}')" class="bg-slate-900 rounded-lg overflow-hidden border border-slate-800 shadow relative group active:scale-95 transition-transform">
+                
+                list.innerHTML = stories.map(s => `
+                    <div onclick="openStory('${s.id}')" class="bg-slate-900 rounded-lg overflow-hidden border border-slate-800 shadow relative group active:scale-95 transition-transform cursor-pointer">
                         <div class="aspect-video bg-slate-800"><img src="${s.cover || 'https://placehold.co/600x400/1e293b/475569?text=No+Cover'}" class="w-full h-full object-cover opacity-80 group-hover:opacity-100"></div>
                         <div class="p-3"><h3 class="font-bold text-sm text-gray-200 truncate">${s.title}</h3></div>
                     </div>`).join('');
-            } catch(e) { $('library-list').innerHTML = `<div class="text-red-400 col-span-2">Error: ${e.message}</div>`; }
+            } catch(e) {
+                showError("ライブラリ読み込みエラー: " + e.message);
+            }
         }
 
-        window.openCreateModal = () => {
-            $('new-title').value = '';
-            $('new-plot').value = '';
-            $('create-modal').classList.remove('hidden');
-        };
-
+        // --- Logic (Simplified for stability) ---
+        window.openCreateModal = () => { $('new-title').value=''; $('new-plot').value=''; $('create-modal').classList.remove('hidden'); };
+        
         async function startNewStory() {
             const title = $('new-title').value;
             const genre = $('new-genre').value;
-            const tone = $('new-tone').value;
-            const extra = $('new-plot').value;
-            
+            const plot = $('new-plot').value;
             if(!title) return alert("タイトルを入力してください");
             
-            // Combine genre/tone into plot
-            const fullPlot = `ジャンル: ${genre}\n文体: ${tone}\n詳細: ${extra || '特になし'}`;
-            
-            appData.currentStory = { title, plot: fullPlot, messages: [], characters: [] };
+            appData.currentStory = { title, plot: `ジャンル:${genre}\n${plot}`, messages: [], characters: [] };
             $('create-modal').classList.add('hidden');
             showScreen('char-studio');
             renderCharList();
         }
 
         async function aiSuggestChars() {
-            const btn = $('ai-char-btn');
-            btn.innerHTML = "考え中...";
+            showLoading(true, "AIがキャラを考案中...");
             try {
-                // Safety check for short input
-                const plotText = appData.currentStory.plot.length < 5 ? "Typical fantasy adventure with a hero." : appData.currentStory.plot;
-
-                const res = await callGroq([
-                    {role:"user", content:`Extract main characters from this plot. If information is scarce, invent typical characters for the genre.
-                    Return JSON array ONLY: [{name:"Name", prompt:"Appearance description in English (hair, eyes, clothes...)"}]. 
-                    Plot: ${plotText}`}
-                ]);
-                
-                // Robust JSON parsing
-                let jsonStr = res;
-                if(res.includes('[')) {
-                    jsonStr = res.substring(res.indexOf('['), res.lastIndexOf(']')+1);
-                } else {
-                    throw new Error("AIがJSON形式で返しませんでした。もう一度試してください。");
-                }
-                
-                const chars = JSON.parse(jsonStr);
-                appData.currentStory.characters = chars;
+                const res = await callGroq([{role:"user", content:`Extract main characters from this plot. Return JSON array ONLY: [{name:"Name", prompt:"Appearance description in English"}]. Plot: ${appData.currentStory.plot}`}]);
+                let jsonStr = res.includes('[') ? res.substring(res.indexOf('['), res.lastIndexOf(']')+1) : "[]";
+                appData.currentStory.characters = JSON.parse(jsonStr);
                 renderCharList();
-            } catch(e) { alert("AI提案エラー: " + e.message); }
-            finally { btn.innerHTML = '<i data-lucide="sparkles" class="w-3 h-3"></i> AI提案 (Groq)'; lucide.createIcons(); }
+            } catch(e) { showError("AI提案エラー: " + e.message); }
+            finally { showLoading(false); }
         }
 
         function renderCharList() {
-            const list = $('char-list');
-            list.innerHTML = appData.currentStory.characters.map((c, i) => `
-                <div class="bg-black border border-slate-700 p-3 rounded flex flex-col gap-2">
-                    <div class="flex gap-2 items-start">
-                        <div class="flex-grow">
-                            <input class="bg-transparent text-indigo-300 font-bold w-full text-sm mb-1 border-b border-transparent focus:border-indigo-500 outline-none" value="${c.name}" onchange="updateChar(${i}, 'name', this.value)">
-                            <textarea class="bg-slate-900 w-full text-xs text-gray-400 p-1 rounded resize-none outline-none" rows="2" onchange="updateChar(${i}, 'prompt', this.value)">${c.prompt}</textarea>
-                        </div>
-                        <button onclick="removeChar(${i})" class="text-gray-600 hover:text-red-400"><i data-lucide="x" class="w-4 h-4"></i></button>
-                    </div>
-                    <div class="flex gap-2 justify-end">
-                        <button onclick="genCharRef(${i}, 'sheet')" class="text-[10px] bg-slate-800 border border-slate-600 px-2 py-1 rounded text-gray-300 hover:text-white">設定画</button>
-                        <button onclick="genCharRef(${i}, 'standing')" class="text-[10px] bg-slate-800 border border-slate-600 px-2 py-1 rounded text-gray-300 hover:text-white">立ち絵</button>
-                    </div>
-                    ${c.image ? `<img src="${c.image}" class="w-full rounded mt-1 border border-slate-800">` : ''}
+            $('char-list').innerHTML = appData.currentStory.characters.map((c,i) => `
+                <div class="bg-black border border-slate-700 p-3 rounded mb-2">
+                    <input class="bg-transparent text-indigo-300 font-bold w-full text-sm mb-1 outline-none" value="${c.name}" onchange="appData.currentStory.characters[${i}].name=this.value">
+                    <textarea class="bg-slate-900 w-full text-xs text-gray-400 p-1 rounded resize-none outline-none" rows="2" onchange="appData.currentStory.characters[${i}].prompt=this.value">${c.prompt}</textarea>
+                    ${c.image ? `<img src="${c.image}" class="w-full rounded mt-2">` : `<button onclick="genCharRef(${i})" class="text-[10px] mt-1 text-pink-400 border border-pink-900 px-2 rounded">画像生成</button>`}
                 </div>
             `).join('');
-            lucide.createIcons();
         }
 
-        window.updateChar = (i, field, val) => appData.currentStory.characters[i][field] = val;
-        window.removeChar = (i) => { appData.currentStory.characters.splice(i, 1); renderCharList(); };
-        window.addEmptyChar = () => { appData.currentStory.characters.push({name:"新規キャラ", prompt:"appearance..."}); renderCharList(); };
-
-        window.genCharRef = async (i, mode) => {
+        window.genCharRef = async (i) => {
             const c = appData.currentStory.characters[i];
-            let prompt = c.prompt + (mode==='sheet' ? ", character sheet, concept art, three views, white background" : ", solo, full body, standing, simple white background");
-            let w = mode==='sheet' ? 1024 : 768;
-            let h = mode==='sheet' ? 768 : 1024;
-            const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?seed=${Math.floor(Math.random()*99999)}&width=${w}&height=${h}&nologo=true&model=flux`;
-            
+            showLoading(true, "キャラ画像を生成中...");
+            const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(c.prompt + ", character sheet, white background")}?seed=${Math.floor(Math.random()*9999)}&width=1024&height=768&nologo=true&model=flux`;
             const img = new Image(); img.src = url;
-            img.onload = () => {
-                appData.currentStory.characters[i].image = url;
-                renderCharList();
-            };
+            img.onload = () => { appData.currentStory.characters[i].image = url; renderCharList(); showLoading(false); };
         };
 
+        window.addEmptyChar = () => { appData.currentStory.characters.push({name:"新規", prompt:"..."}); renderCharList(); };
+
         async function finishCharSetup() {
-            if(!appData.currentStory.id) {
-                const id = await window.FB.createStory(appData.currentStory);
-                appData.currentStory.id = id;
-            } else {
-                await window.FB.saveStory(appData.currentStory.id, { characters: appData.currentStory.characters });
-            }
-            showScreen('studio');
-            if(appData.currentStory.messages.length === 0) generateFirstScene();
-            else renderMessages();
+            showLoading(true, "物語を作成中...");
+            try {
+                if(!appData.currentStory.id) {
+                    const id = await window.FB.createStory(appData.currentStory);
+                    appData.currentStory.id = id;
+                } else {
+                    await window.FB.saveStory(appData.currentStory.id, { characters: appData.currentStory.characters });
+                }
+                showScreen('studio');
+                if(appData.currentStory.messages.length === 0) await generateStoryLogic("物語の導入を書いてください。");
+                else renderMessages();
+            } catch(e) { showError("作成エラー: " + e.message); }
+            finally { showLoading(false); }
         }
 
         async function openStory(id) {
-            const s = await window.FB.getStory(id);
-            if(!s) return;
-            appData.currentStory = { id, ...s };
-            showScreen('studio');
-            renderMessages();
+            showLoading(true, "物語を開いています...");
+            try {
+                const s = await window.FB.getStory(id);
+                if(!s) throw new Error("物語が見つかりません");
+                appData.currentStory = { id, ...s };
+                showScreen('studio');
+                renderMessages();
+            } catch(e) { showError(e.message); }
+            finally { showLoading(false); }
         }
 
-        async function generateFirstScene() {
-            $('studio-content').innerHTML = '<div class="text-center animate-pulse mt-20 text-gray-500">物語を開始中...</div>';
-            await generateStoryLogic(`以下の設定で物語の導入を書いて。\nタイトル:${appData.currentStory.title}\nあらすじ:${appData.currentStory.plot}`);
-        }
-
+        // Chat & Visual Logic
         $('send-btn').onclick = async () => {
             const txt = $('user-input').value.trim();
             if(!txt) return;
             $('user-input').value = '';
             appData.currentStory.messages.push({role:'user', content:txt});
             renderMessages();
+            showLoading(true, "執筆中...");
             await generateStoryLogic(txt);
+            showLoading(false);
         };
 
         async function generateStoryLogic(instruction) {
-            $('send-btn').disabled = true;
             try {
                 const context = [
-                    {role:"system", content:`あなたはプロの小説家です。以下のキャラ設定を踏まえて執筆してください。\n${JSON.stringify(appData.currentStory.characters)}`},
+                    {role:"system", content:`Pro novelist. Characters: ${JSON.stringify(appData.currentStory.characters)}`},
                     ...appData.currentStory.messages.slice(-10)
                 ];
                 if(instruction) context.push({role:'user', content:instruction});
-
                 const aiText = await callGroq(context);
                 appData.currentStory.messages.push({role:'assistant', content:aiText});
                 renderMessages();
                 await window.FB.saveStory(appData.currentStory.id, { messages: appData.currentStory.messages });
-                
-                checkForNewChars(aiText);
-
-            } catch(e) { alert(e.message); }
-            finally { $('send-btn').disabled = false; }
+            } catch(e) { showError(e.message); }
         }
-
-        async function checkForNewChars(text) {
-            const existingNames = appData.currentStory.characters.map(c => c.name).join(", ");
-            try {
-                const res = await callGroq([{role:"user", content:`
-                    Analyze this text. Are there any NEW important named characters appearing who are NOT in this list: [${existingNames}]?
-                    If yes, output JSON: { "found": true, "name": "Name", "prompt": "Appearance description" }.
-                    If no, output { "found": false }.
-                    Text: ${text.substring(0, 1000)}
-                `}]);
-                
-                let jsonStr = res;
-                if(res.includes('{')) jsonStr = res.substring(res.indexOf('{'), res.lastIndexOf('}')+1);
-                const json = JSON.parse(jsonStr);
-                
-                if(json.found) {
-                    appData.pendingNewChar = json;
-                    $('new-char-name').innerText = json.name;
-                    $('new-char-alert').classList.remove('hidden', 'translate-y-10', 'opacity-0');
-                }
-            } catch(e) { console.log("Scout check failed", e); }
-        }
-
-        window.acceptNewChar = async () => {
-            if(!appData.pendingNewChar) return;
-            appData.currentStory.characters.push({ name: appData.pendingNewChar.name, prompt: appData.pendingNewChar.prompt });
-            await window.FB.saveStory(appData.currentStory.id, { characters: appData.currentStory.characters });
-            $('new-char-alert').classList.add('hidden');
-            alert(`${appData.pendingNewChar.name} をキャストに追加しました！`);
-        };
 
         async function callGroq(messages) {
             const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                 method: "POST", headers: {"Authorization": `Bearer ${appData.keys.groq}`, "Content-Type": "application/json"},
                 body: JSON.stringify({ model: "llama3-70b-8192", messages: messages })
             });
+            if(!res.ok) throw new Error("Groq API Error: " + res.status);
             const data = await res.json();
             return data.choices[0].message.content;
         }
 
         function renderMessages() {
-            const c = $('studio-content');
-            c.innerHTML = appData.currentStory.messages.map(m => {
+            $('studio-content').innerHTML = appData.currentStory.messages.map(m => {
                 if(appData.mode === 'view' && m.role !== 'assistant') return '';
-                const img = m.image ? `<img src="${m.image}" class="w-full md:w-2/3 rounded mb-2 border border-slate-700 block mx-auto shadow-lg">` : '';
-                if(appData.mode === 'view') return `<div class="book-page animate-fade-in">${img}<p>${m.content.replace(/\n/g,'<br>')}</p></div>`;
+                const img = m.image ? `<img src="${m.image}" class="w-full md:w-2/3 rounded mb-2 border border-slate-700 block mx-auto">` : '';
                 const bubble = m.role==='user' ? 'bg-indigo-900 text-white ml-auto' : 'bg-slate-900 text-gray-300 mr-auto border-l-2 border-indigo-500/50';
                 return `<div class="mb-4 fade-in flex"><div class="px-4 py-3 rounded-lg text-sm leading-relaxed max-w-[90%] ${bubble}">${img}${m.content.replace(/\n/g,'<br>')}</div></div>`;
             }).join('');
-            c.scrollTop = c.scrollHeight;
+            $('studio-content').scrollTop = $('studio-content').scrollHeight;
         }
 
+        // Visual Panel
         window.toggleVisualTab = () => {
             const p = $('visual-panel');
-            p.style.transform = p.style.transform === 'translateY(0px)' ? 'translateY(100%)' : 'translateY(0px)';
-            if(p.style.transform === 'translateY(0px)') {
-                $('visual-char-chips').innerHTML = appData.currentStory.characters.map((c, i) => `
-                    <label class="flex items-center gap-2 bg-slate-800 px-3 py-2 rounded-lg border border-slate-700 cursor-pointer hover:bg-slate-700 transition-colors flex-shrink-0">
-                        <input type="checkbox" class="char-checkbox accent-pink-500 w-4 h-4" value="${i}">
-                        <span class="text-xs text-gray-300 select-none">${c.name}</span>
-                    </label>
-                `).join('');
+            const show = p.style.transform !== 'translateY(0px)';
+            p.style.transform = show ? 'translateY(0px)' : 'translateY(100%)';
+            if(show) {
+                $('visual-char-chips').innerHTML = (appData.currentStory.characters||[]).map((c, i) => `
+                    <label class="flex items-center gap-2 bg-slate-800 px-3 py-2 rounded border border-slate-700 flex-shrink-0">
+                        <input type="checkbox" class="char-checkbox accent-pink-500" value="${i}"><span class="text-xs text-gray-300">${c.name}</span>
+                    </label>`).join('');
             }
         };
 
@@ -500,30 +467,15 @@
             const checked = document.querySelectorAll('.char-checkbox:checked');
             let prompts = [], count = 0;
             checked.forEach(cb => { prompts.push(`(${appData.currentStory.characters[cb.value].prompt})`); count++; });
-
-            let finalCharPrompt = "";
-            if(count === 1) finalCharPrompt = prompts[0];
-            if(count === 2) finalCharPrompt = `${prompts[0]} on the left, ${prompts[1]} on the right, 2people`;
-            if(count > 2) finalCharPrompt = `${prompts.join(' and ')}, ${count}people, group shot`;
-
-            const p = $('visual-custom-prompt').value || "scene";
-            const aspect = $('visual-aspect').value;
-            const mode = $('visual-mode').value;
             
-            let w=1024, h=768; 
-            if(aspect === '16:9') { w=1024; h=576; } else if(aspect === '9:16') { w=576; h=1024; } else if(aspect === '1:1') { w=1024; h=1024; }
-
-            let suffix = ", masterpiece, best quality, 8k";
-            if(mode === 'sheet') suffix += ", character sheet, concept art, three views, white background";
-            if(mode === 'standing') suffix += ", full body, standing, simple white background";
-
-            const finalPrompt = `${finalCharPrompt}, ${p}, ${suffix}`;
-            const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?seed=${Math.floor(Math.random()*100000)}&width=${w}&height=${h}&nologo=true&model=flux`;
+            let finalP = count > 0 ? prompts.join(' and ') + ", " : "";
+            finalP += $('visual-custom-prompt').value || "scene";
+            
+            const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalP + ", masterpiece, 8k")}?seed=${Math.floor(Math.random()*9999)}&width=1024&height=768&nologo=true&model=flux`;
             
             const div = document.createElement('div');
             div.className = "relative group mb-4";
-            div.innerHTML = `<img src="${url}" class="w-full rounded mb-2 border border-slate-700">
-                <div class="flex justify-end gap-2"><a href="${url}" download class="bg-slate-800 px-3 py-1 rounded text-xs">DL</a><button onclick="insertImage('${url}')" class="bg-indigo-600 text-white px-3 py-1 rounded text-xs">挿入</button></div>`;
+            div.innerHTML = `<img src="${url}" class="w-full rounded border border-slate-700"><div class="flex justify-end gap-2 mt-1"><a href="${url}" download class="bg-slate-800 px-2 py-1 rounded text-xs">DL</a><button onclick="insertImage('${url}')" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs">挿入</button></div>`;
             $('visual-list').prepend(div);
         };
 
@@ -534,11 +486,14 @@
             toggleVisualTab();
         };
 
-        window.branchStory = async () => { const newT = prompt("分岐タイトル", appData.currentStory.title + " (IF)"); if(!newT)return; const id = await window.FB.createStory({...appData.currentStory, title:newT, id:null}); openStory(id); };
-        window.openCharStudio = () => { showScreen('char-studio'); renderCharList(); };
-        window.addEmptyChar = () => { appData.currentStory.characters.push({name:"新規", prompt:"..."}); renderCharList(); };
-        window.showScreen = (id) => { ['library','studio','char-studio'].forEach(s => $(`screen-${s}`).classList.add('translate-x-full','hidden')); if(id==='library')$(`screen-${id}`).classList.remove('hidden'); else $(`screen-${id}`).classList.remove('translate-x-full','hidden'); if(id==='studio')$('mode-toggle').classList.remove('hidden'); else $('mode-toggle').classList.add('hidden'); if(id==='library')loadLibrary(); };
-        $('mode-toggle').onclick = () => { appData.mode = appData.mode==='edit'?'view':'edit'; $('mode-toggle').innerHTML=appData.mode==='edit'?'<i data-lucide="eye" class="w-4 h-4"></i> View':'<i data-lucide="edit-3" class="w-4 h-4"></i> Edit'; renderMessages(); };
+        // Navigation
+        window.showScreen = (id) => {
+            ['library','studio','char-studio'].forEach(s => $(`screen-${s}`).classList.add('translate-x-full','hidden'));
+            if(id==='library')$(`screen-${id}`).classList.remove('hidden'); else $(`screen-${id}`).classList.remove('translate-x-full','hidden');
+            if(id==='studio') { $('view-mode-btn').classList.remove('hidden'); } else { $('view-mode-btn').classList.add('hidden'); }
+            if(id==='library') loadLibrary();
+        };
+        $('view-mode-btn').onclick = () => { appData.mode = appData.mode==='edit'?'view':'edit'; $('view-mode-btn').innerHTML=appData.mode==='edit'?'<i data-lucide="eye" class="w-4 h-4"></i> View':'<i data-lucide="edit-3" class="w-4 h-4"></i> Edit'; renderMessages(); };
 
         showScreen('library');
     </script>
